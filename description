@@ -1,0 +1,16 @@
+add/download:
+packages/apps/SamsungServiceMode
+device/samsung/i9082
+vendor/samsung/baffinlite
+hardware/samsung
+patch:
+external/chromium_org external_chromium_webview.patch
+hardware/broadcom/libbt hardware_Broadcom.patch
+frameworks/opt/telephony frameworks_opt_telephony.patch
+frameworks/native frameworks_native.patch
+frameworks/av frameworks_av.patch
+frameworks/base frameworks_base.patch
+frameworks/opt/telephony-msim frameworks_opt_telephony_msim.patch
+packages/apps/Settings packages_apps_Settings.patch
+packages/services/Telephony packages_services_Telephony.patch
+vendor/cm vendor_cm.patch

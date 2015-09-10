@@ -1,0 +1,74 @@
+diff --git a/src/java/com/android/internal/telephony/ExtCallManager.java b/src/java/com/android/internal/telephony/ExtCallManager.java
+index 7db9935..244aa32 100644
+--- a/src/java/com/android/internal/telephony/ExtCallManager.java
++++ b/src/java/com/android/internal/telephony/ExtCallManager.java
+@@ -334,6 +334,18 @@ public class ExtCallManager extends CallManager {
+             case RINGING:
+                 if (VDBG) Rlog.d(LOG_TAG, "setAudioMode RINGING");
+                 int curAudioMode = mAudioManager.getMode();
++
++                // HACK: When Dual-SIM is enabled and call waiting occurs,
++                // com.android.phone.CallCommandService.setActiveSubscription
++                // will cause setAudioMode to be called, causing the audio
++                // mode to be chagned to "MODE_RINGTONE", rendering the active
++                // conversation to be inaudiable.
++                // (The setAudioMode() call does not occur without Dual-SIM.)
++                if (curAudioMode == AudioManager.MODE_IN_CALL) {
++                    Rlog.d(LOG_TAG, "Skip MODE_IN_CALL -> MODE_RINGTONE (assume call waiting)");
++                    return;
++                }
++
+                 if (curAudioMode != AudioManager.MODE_RINGTONE) {
+                     // only request audio focus if the ringtone is going to be heard
+                     if (mAudioManager.getStreamVolume(AudioManager.STREAM_RING) > 0
+diff --git a/src/java/com/android/internal/telephony/PhoneBase.java b/src/java/com/android/internal/telephony/PhoneBase.java
+index b580725..0cbc33e 100644
+--- a/src/java/com/android/internal/telephony/PhoneBase.java
++++ b/src/java/com/android/internal/telephony/PhoneBase.java
+@@ -150,6 +150,7 @@ public abstract class PhoneBase extends Handler implements Phone {
+     boolean mDnsCheckDisabled;
+     public DcTrackerBase mDcTracker;
+     boolean mDoesRilSendMultipleCallRing;
++	boolean mDoesRilSendCallRing;
+     int mCallRingContinueToken;
+     int mCallRingDelay;
+     public boolean mIsTheCurrentActivePhone = true;
+@@ -329,6 +330,11 @@ public abstract class PhoneBase extends Handler implements Phone {
+                 TelephonyProperties.PROPERTY_RIL_SENDS_MULTIPLE_CALL_RING, true);
+         Rlog.d(LOG_TAG, "mDoesRilSendMultipleCallRing=" + mDoesRilSendMultipleCallRing);
+ 
++		// Some RIL do not even send a single RIL_UNSOL_CALL_RING
++        mDoesRilSendCallRing = SystemProperties.getBoolean(
++                "ro.telephony.call_ring", true);
++        Rlog.d(LOG_TAG, "mDoesRilSendCallRing=" + mDoesRilSendCallRing);
++
+         mCallRingDelay = SystemProperties.getInt(
+                 TelephonyProperties.PROPERTY_CALL_RING_DELAY, 3000);
+         Rlog.d(LOG_TAG, "mCallRingDelay=" + mCallRingDelay);
+@@ -1381,6 +1387,18 @@ public abstract class PhoneBase extends Handler implements Phone {
+     protected void notifyNewRingingConnectionP(Connection cn) {
+         if (!mIsVoiceCapable)
+             return;
++
++		// Fake RIL_UNSOL_CALL_RING if the RIL doesn't send it.
++        // Note that we need the delay to prevent the request from
++        // being sent after CallTracker detects "RINGING" state, but
++        // before the correct contact-specific ringtone is queried.
++        // Otherwise, the incorrect ringtone will be used
++        if (!mDoesRilSendCallRing) {
++            int token = ++mCallRingContinueToken;
++            sendMessageDelayed(
++                    obtainMessage(EVENT_CALL_RING_CONTINUE, token, 0), mCallRingDelay);
++        }
++
+         AsyncResult ar = new AsyncResult(null, cn, null);
+         mNewRingingConnectionRegistrants.notifyRegistrants(ar);
+     }
+@@ -1522,6 +1540,7 @@ public abstract class PhoneBase extends Handler implements Phone {
+         pw.println(" mDnsCheckDisabled=" + mDnsCheckDisabled);
+         pw.println(" mDcTracker=" + mDcTracker);
+         pw.println(" mDoesRilSendMultipleCallRing=" + mDoesRilSendMultipleCallRing);
++		pw.println(" mDoesRilSendCallRing=" + mDoesRilSendCallRing);
+         pw.println(" mCallRingContinueToken=" + mCallRingContinueToken);
+         pw.println(" mCallRingDelay=" + mCallRingDelay);
+         pw.println(" mIsTheCurrentActivePhone=" + mIsTheCurrentActivePhone);
